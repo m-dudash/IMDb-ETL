@@ -1,0 +1,87 @@
+1. Top žánre podľa priemerného hodnotenia
+
+SELECT 
+    dg.genre_name AS genre,
+    AVG(fr.avg_rating) AS avg_genre_rating
+FROM fact_ratings fr
+JOIN dim_genres dg ON fr.id_genres = dg.id_genres
+GROUP BY dg.genre_name
+ORDER BY avg_genre_rating DESC
+LIMIT 7;
+
+
+
+
+2. Porovnanie počtu filmov natočených na kontinentoch: Európa, Amerika, Ázia
+
+
+SELECT 
+    CASE
+        WHEN dm.country IN ('USA', 'Canada', 'Mexico', 'Brazil', 'Columbia', 'Chili', 'Argentina', 'Venezuela') THEN 'America'
+        WHEN dm.country IN ('Germany', 'France', 'UK', 'Spain', 'Italy', 'Poland', 'Netherlands', 'Sweden', 'Belgium', 'Slovakia') THEN 'Europe'
+        WHEN dm.country IN ('China', 'India', 'Japan', 'South Korea', 'Indonesia', 'Pakistan', 'Bangladesh', 'Philippines', 'Vietnam', 'Turkey') THEN 'Asia'
+    END AS region,
+    dm.year AS release_year,
+    COUNT(*) AS movie_count
+FROM dim_movies dm
+WHERE dm.country IN ('USA', 'Canada', 'Mexico', 'Brazil', 'Columbia', 'Chili', 'Argentina', 'Venezuela')
+   OR dm.country IN ('Germany', 'France', 'UK', 'Spain', 'Italy', 'Poland', 'Netherlands', 'Sweden', 'Belgium', 'Slovakia')
+   OR dm.country IN ('China', 'India', 'Japan', 'South Korea', 'Indonesia', 'Pakistan', 'Bangladesh', 'Philippines', 'Vietnam', 'Turkey')
+GROUP BY region, dm.year
+ORDER BY dm.year ASC;
+
+
+3. počet filmov natočených v jednotlivých krajinách podľa rokov
+SELECT 
+    dm.country AS country,
+    dm.year AS release_year,
+    COUNT(dm.id_movie) AS movie_count
+FROM dim_movies dm
+WHERE dm.country IN ('USA', 'India', 'France', 'Japan', 'UK', 'Germany')
+GROUP BY dm.country, dm.year
+ORDER BY dm.country, dm.year;
+
+
+
+4. Porovnanie priemerného hodnotenia amerických a nemeckých filmov
+SELECT 
+    CASE 
+        WHEN dm.country LIKE '%Germany%' THEN 'Germany'
+        WHEN dm.country LIKE '%USA%' THEN 'USA'
+    END AS country,
+    AVG(fr.avg_rating) AS average_rating
+FROM fact_ratings fr
+JOIN dim_movies dm ON fr.id_movie = dm.id_movie
+WHERE dm.country LIKE '%Germany%' OR dm.country LIKE '%USA%'
+GROUP BY country;
+
+
+5. Priemerné hodnotenie filmov režisérov podľa veku režiséra
+SELECT
+    CASE
+        WHEN (DATE_PART('year', CURRENT_DATE) - DATE_PART('year', dp.date_of_birth)) BETWEEN 20 AND 29 THEN '20-29'
+        WHEN (DATE_PART('year', CURRENT_DATE) - DATE_PART('year', dp.date_of_birth)) BETWEEN 30 AND 39 THEN '30-39'
+        WHEN (DATE_PART('year', CURRENT_DATE) - DATE_PART('year', dp.date_of_birth)) BETWEEN 40 AND 49 THEN '40-49'
+        WHEN (DATE_PART('year', CURRENT_DATE) - DATE_PART('year', dp.date_of_birth)) BETWEEN 50 AND 59 THEN '50-59'
+        WHEN (DATE_PART('year', CURRENT_DATE) - DATE_PART('year', dp.date_of_birth)) >= 60 THEN '60+'
+        ELSE 'Unknown'
+    END AS age_group,
+    AVG(fr.avg_rating) AS average_rating
+FROM fact_ratings fr
+JOIN dim_movies dm ON fr.id_movie = dm.id_movie
+JOIN dim_persons dp ON fr.id_persons = dp.id_persons
+WHERE dp.category IS NULL  
+GROUP BY age_group
+ORDER BY age_group;
+
+
+
+6. vzťah medzi počtom hlasov filmu a jeho dĺžkou trvania
+SELECT 
+    dm.duration AS movie_duration,  
+    fr.total_votes AS total_votes, 
+    dm.year AS release_year
+FROM fact_ratings fr
+JOIN dim_movies dm ON fr.id_movie = dm.id_movie
+ORDER BY release_year ASC;
+
