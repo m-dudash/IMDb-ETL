@@ -4,7 +4,7 @@ Tento repozitár obsahuje implementáciu ETL procesu nad datasetom IMDb. Projekt
 
 ----
 ## **1. Úvod a popis zdrojových dát**
-в процесе
+Cieľom tohto projektu je analyzovať databázu IMDb pomocou multidimenzionálneho modelu. Analýza sa týka filmov, ich počtu hlasov a hodnotení, žánrov a osôb zúčastnených na filme - hercov a režisérov. Analýza nám umožní vidieť vzájomné závislosti jednotlivých faktorov, tendencie natáčania filmov a pod. 
 
 ### Zdrojove data:
 - `names.csv`	-- informácie o osobách
@@ -158,8 +158,9 @@ SELECT
 FROM ratings_staging r
 JOIN movie_staging m ON r.movie_id = m.id
 JOIN genre_staging g ON m.id = g.movie_id
-JOIN role_staging rs ON rs.movie_id = m.id
-JOIN names_staging n ON rs.name_id = n.id
+JOIN director_staging dm_map ON m.id = dm_map.movie_id
+JOIN role_staging rm ON m.id = rm.movie_id
+JOIN names_staging n ON rm.name_id = n.id OR dm_map.name_id = n.id
 JOIN dim_movies dm ON m.id = dm.id_movie
 JOIN dim_genres dg ON g.genre = dg.genre_name
 JOIN dim_persons dp ON n.id = dp.id_persons;
@@ -179,7 +180,152 @@ DROP TABLE IF EXISTS genre_staging;
 DROP TABLE IF EXISTS role_staging;
 DROP TABLE IF EXISTS director_staging;
 ```
-Teraz vytvorený hviezdny model naplnený údajmi zo súborov .csv nám umožní efektívne a pohodlne analyzovať databázu IMDB.
+Teraz vytvorený hviezdny model naplnený údajmi zo súborov `.csv` nám umožní efektívne a pohodlne analyzovať databázu IMDB.
 
 
+## **4 Vizualizácia dát**
+Nižšie je uvedených 6 dashboards so štatistikami vytvorenými pomocou SQL dotazov  v Snowflake.
 
+### 1  - Top žánre podľa priemerného hodnotenia
+<p align="center">
+  <img src="./dashboards/dashboard1.png" alt="dashboard1">
+  <br>
+  <em>Obrázok 3: Top žánre podľa priemerného hodnotenia</em>
+</p>
+
+```sql
+SELECT 
+    dg.genre_name AS genre,
+    AVG(fr.avg_rating) AS avg_genre_rating
+FROM fact_ratings fr
+JOIN dim_genres dg ON fr.id_genres = dg.id_genres
+GROUP BY dg.genre_name
+ORDER BY avg_genre_rating DESC
+LIMIT 7;
+```
+
+V grafe sú zobrazené najlepšie hodnotené žánre v rámci priemerného hodnotenia filmu v jednotlivých žánroch. Jasne vidíme, že najlepšie hodnotené sú filmy so žánrami dráma a romantika. Graf zobrazuje len 7 najlepšie hodnotených žánrov.
+___
+### 2 -  Porovnanie počtu filmov natočených na kontinentoch: Európa, Amerika, Ázia
+<p align="center">
+  <img src="./dashboards/dashboard2.png" alt="dashboard2">
+  <br>
+  <em>Obrázok 4: Tendencia natáčať filmy na kontinentoch</em>
+</p>
+
+```sql
+SELECT 
+    CASE
+        WHEN dm.country IN ('USA', 'Canada', 'Mexico', 'Brazil', 'Columbia', 'Chili', 'Argentina', 'Venezuela') THEN 'America'
+        WHEN dm.country IN ('Germany', 'France', 'UK', 'Spain', 'Italy', 'Poland', 'Netherlands', 'Sweden', 'Belgium', 'Slovakia') THEN 'Europe'
+        WHEN dm.country IN ('China', 'India', 'Japan', 'South Korea', 'Indonesia', 'Pakistan', 'Bangladesh', 'Philippines', 'Vietnam', 'Turkey') THEN 'Asia'
+    END AS region,
+    dm.year AS release_year,
+    COUNT(*) AS movie_count
+FROM dim_movies dm
+WHERE dm.country IN ('USA', 'Canada', 'Mexico', 'Brazil', 'Columbia', 'Chili', 'Argentina', 'Venezuela')
+   OR dm.country IN ('Germany', 'France', 'UK', 'Spain', 'Italy', 'Poland', 'Netherlands', 'Sweden', 'Belgium', 'Slovakia')
+   OR dm.country IN ('China', 'India', 'Japan', 'South Korea', 'Indonesia', 'Pakistan', 'Bangladesh', 'Philippines', 'Vietnam', 'Turkey')
+GROUP BY region, dm.year
+ORDER BY dm.year ASC;
+```
+
+Graf znázorňuje počet filmov natočených na troch kontinentoch: Európa, Amerika, Ázia. Všetky tri vykazujú klesajúcu tendenciu v počte nakrútených filmov. V každom roku sa najviac filmov natočí v Amerike a najmenej v Európe. Do úvahy sa bralo 10 najväčších krajín každého kontinentu (Severná a Južná Amerika spolu).
+___
+
+### 3  - Počet filmov natočených v jednotlivých krajinách podľa rokov
+<p align="center">
+  <img src="./dashboards/dashboard3.png" alt="dashboard3">
+  <br>
+  <em>Obrázok 5: Počet filmov natočených v jednotlivých krajinách podľa rokov</em>
+</p>
+
+```sql
+SELECT 
+    dm.country AS country,
+    dm.year AS release_year,
+    COUNT(dm.id_movie) AS movie_count
+FROM dim_movies dm
+WHERE dm.country IN ('USA', 'India', 'France', 'Japan', 'UK', 'Germany')
+GROUP BY dm.country, dm.year
+ORDER BY dm.country, dm.year;
+```
+
+Tento graf zobrazuje počet filmov nakrútených v jednotlivých rokoch, ale nie podľa kontinentov, ale podľa desiatich najväčších krajín mediálnych producentov. V počte vyrobených filmov sú na čele dve krajiny: USA a India. V Európe má najväčší počet vyrobených filmov Spojené kráľovstvo
+___
+
+### 4 - Porovnanie priemerného hodnotenia nemeckých a amerických filmov
+<p align="center">
+  <img src="./dashboards/dashboard4.png" alt="dashboard4">
+  <br>
+  <em>Obrázok 6: Porovnanie priemerného hodnotenia nemeckých a amerických filmov</em>
+</p>
+
+```sql
+SELECT 
+    CASE 
+        WHEN dm.country LIKE '%Germany%' THEN 'Germany'
+        WHEN dm.country LIKE '%USA%' THEN 'USA'
+    END AS country,
+    AVG(fr.avg_rating) AS average_rating
+FROM fact_ratings fr
+JOIN dim_movies dm ON fr.id_movie = dm.id_movie
+WHERE dm.country LIKE '%Germany%' OR dm.country LIKE '%USA%'
+GROUP BY country;
+```
+
+Graf ukazuje, ako sú v priemere hodnotené filmy dvoch veľkých štátov, USA a Nemecka. Rozdiel je 0,3 hodnotiacich jednotiek, z čoho môžeme usúdiť, že hoci si nemecké filmy držia vysokú známku, americká filmová produkcia v kvalite príliš nezaostáva.
+___
+
+### 5  -  Priemerné hodnotenie filmov režisérov podľa veku režiséra
+<p align="center">
+  <img src="./dashboards/dashboard5.png" alt="dashboard5">
+  <br>
+  <em>Obrázok 7: Priemerné hodnotenie filmov režisérov podľa veku režiséra</em>
+</p>
+
+```sql
+SELECT
+    CASE
+        WHEN (DATE_PART('year', CURRENT_DATE) - DATE_PART('year', dp.date_of_birth)) BETWEEN 20 AND 29 THEN '20-29'
+        WHEN (DATE_PART('year', CURRENT_DATE) - DATE_PART('year', dp.date_of_birth)) BETWEEN 30 AND 39 THEN '30-39'
+        WHEN (DATE_PART('year', CURRENT_DATE) - DATE_PART('year', dp.date_of_birth)) BETWEEN 40 AND 49 THEN '40-49'
+        WHEN (DATE_PART('year', CURRENT_DATE) - DATE_PART('year', dp.date_of_birth)) BETWEEN 50 AND 59 THEN '50-59'
+        WHEN (DATE_PART('year', CURRENT_DATE) - DATE_PART('year', dp.date_of_birth)) >= 60 THEN '60+'
+        ELSE 'Unknown'
+    END AS age_group,
+    AVG(fr.avg_rating) AS average_rating
+FROM fact_ratings fr
+JOIN dim_movies dm ON fr.id_movie = dm.id_movie
+JOIN dim_persons dp ON fr.id_persons = dp.id_persons
+WHERE dp.category IS NULL  
+GROUP BY age_group
+ORDER BY age_group;
+```
+
+Graf, ktorého cieľom je zistiť, či vek režiséra ovplyvňuje hodnotenie filmu, ktorý natočil, a aký vek režisérov v priemere vytvára najlepšie filmy. Ako možno vidieť, najlepší režiséri sú tí, ktorí majú viac ako 60 rokov a majú veľa skúseností vo filmovom priemysle. Zatiaľ na druhom mieste sú mladí režiséri vo veku 20-29 rokov, ktorí pravdepodobne držia kvalitu filmov vďaka svojim inovatívnym nápadom
+___
+
+### 6  - Vzťah medzi počtom hlasov filmu a jeho dĺžkou trvania
+<p align="center">
+  <img src="./dashboards/dashboard6.png" alt="dashboard6">
+  <br>
+  <em>Obrázok 8: Vzťah medzi počtom hlasov filmu a jeho dĺžkou trvania
+</em>
+</p>
+
+```sql
+SELECT 
+    dm.duration AS movie_duration,  
+    fr.total_votes AS total_votes, 
+    dm.year AS release_year
+FROM fact_ratings fr
+JOIN dim_movies dm ON fr.id_movie = dm.id_movie
+ORDER BY release_year ASC;
+```
+
+Graf, ktorý znázorňuje vzťah medzi dĺžkou filmu a počtom hlasov. Je vidieť, že najviac hlasov majú filmy, ktoré trvajú 100-150 minút - od 4 miliónov hlasov až po 17 miliónov. Menší počet hlasov majú filmy, ktoré trvajú 80-100 minút. - v okolí jedného milióna.
+Spodná časť grafu tiež ukazuje, že väčšina filmov bez ohľadu na ich dĺžku nedostávala viac ako pol milióna hlasov.
+___
+
+**Author:** *Mykhailo M. Dudash* 
